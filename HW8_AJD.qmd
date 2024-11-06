@@ -1,0 +1,20 @@
+---
+title: "HW8_AJD"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+
+#pacman to check whether packages are installed, if not load them
+if (!require("pacman")) install.packages("pacman")
+library(pacman)
+pacman::p_load(dplyr,
+ tidyverse,
+ ggplot2,
+ readr,
+ psych,
+ reshape2,
+ gganimate)
+
+```
