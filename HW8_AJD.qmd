@@ -14,7 +14,178 @@ pacman::p_load(dplyr,
  ggplot2,
  readr,
  psych,
- reshape2,
- gganimate)
+ lubridate,
+ GGally,
+ tidymodels)
+
+```
+
+1.  Reading in the data
+
+```{r}
+read_csv("SeoulBikeData.csv",locale=locale(encoding="latin1")) ->bikedata
+```
+
+2.  EDA
+
+```{r}
+#1. Checking for missingness
+sum(is.na(bikedata))
+  #no NAs 
+
+#2. Checking the column types and values
+head(bikedata)
+#all column types make sense except the data-
+bikedata$Date <- mdy(bikedata$Date)
+
+summary(bikedata)
+#numeric columns are fine, categoricals need converted to factors
+bikedata <- bikedata %>%
+  mutate(across(where(is.character), as.factor))
+
+lapply(bikedata[sapply(bikedata, is.factor)], table)
+#categorical variables look fine
+
+#Renaming columns for ease
+names(bikedata) <-
+  c(
+    "date",
+    "rental_count",
+    "hour",
+    "temperature",
+    "humidity",
+    "wind_speed",
+    "visability",
+    "dew_pt_temp",
+    "solar_radiation",
+    "rainfall",
+    "snowfall",
+    "seasons",
+    "holiday",
+    "functioning_day"
+  )
+
+#additional summary statistics
+table(bikedata$functioning_day)
+table(bikedata$holiday)
+table(bikedata$seasons)
+
+summary(bikedata$rental_count)
+
+bikedata %>% group_by(functioning_day, holiday, seasons) %>% summarize(count =
+                                                                         n())
+
+bikedata %>% group_by(functioning_day, rental_count) %>% summarize()
+
+#filtering dataset on functioning days only
+bikedata <- bikedata %>% filter(functioning_day == "Yes")
+
+#summarize across the hours
+bikedata_summary <-
+  bikedata %>% group_by(date, seasons, holiday) %>%
+  summarize(
+    #summing rental count, rainfall, and snowfall
+    total_rental_count = sum(rental_count, na.rm = TRUE),
+    total_rainfall = sum(rainfall, na.rm = TRUE),
+    total_snowfall = sum(snowfall, na.rm = TRUE),
+    
+    #calculate mean for other weather-related variables (temperature, dew_pt_temp, humidity, wind_speed, visability, solar_radiation)
+    avg_temperature = mean(temperature, na.rm = TRUE),
+    avg_humidity = mean(humidity, na.rm = TRUE),
+    avg_wind_speed = mean(wind_speed, na.rm = TRUE),
+    avg_dew_pt_temp = mean(dew_pt_temp, na.rm = TRUE),
+    avg_visability = mean(visability, na.rm = TRUE),
+    avg_solar_radiation = mean(solar_radiation, na.rm = TRUE)
+  ) %>% ungroup()
+
+#Basic summary stats with new data 
+summary(bikedata_summary)
+sum(is.na(bikedata_summary))
+ #get rid of the na's 
+bikedata_summary<- bikedata_summary%>% drop_na()
+
+  #correlation matrix between the numeric variables 
+bike_numeric <- bikedata_summary[sapply(bikedata_summary, is.numeric)]
+cor(bike_numeric)
+
+#There are some obvious/expected correlations just due to this being a lot of weather data, such as a positive correlation between humidity and rainfall. Something I think is interesting is the positive correlation between dew pt. and total rental count (I hate a humid day) but again that's probably just because, as we see, dew pt. has almost a completely positive correlation with temperature (0.97) 
+
+categorical_vars <- c("seasons","holiday")
+numeric_vars <- names(bike_numeric)
+
+#Loop through each categorical variable to create a plot
+for (cat_var in categorical_vars) {
+  long_data<- bikedata_summary %>%
+    select(all_of(c(cat_var,numeric_vars))) %>% 
+    pivot_longer(cols = all_of(numeric_vars), names_to = "numeric_variable", values_to = "value")
+
+  #plot
+  plot <- ggplot(long_data, aes_string(x = cat_var, y = "value")) +
+    geom_boxplot() +
+    facet_wrap(~ numeric_variable, scales = "free_y") +
+    labs(
+      title = paste("Relationship Between", cat_var, "and Numeric Variables"),
+      x = cat_var,
+      y = "Value"
+    ) +
+    theme_minimal()
+  
+  # Print the plot
+  print(plot)
+}
+
+#The relationship between snow and rainfall and whether its a holiday or not is weird! Other than that there isn't anything way out of the ordinary. 
+
+#Looking at how total rent count relates to the other variables 
+  
+  #with numeric variables using GGally package 
+ggpairs(bike_numeric, title = "Scatterplot Matrix: Total Rental Count and Numeric Variables",
+        #first time I printed everything was way too big for screen 
+        lower = list(continuous = wrap("points", size = 0.5, alpha = 0.3)), #adjust point size for each scatter plot 
+        upper = list(continuous = wrap("cor", size = 3)) #adjust size of the corr. statistics in each box 
+) + theme(
+   axis.text = element_text(size = 6), #smaller axis labels 
+   strip.text = element_text(size = 6) #smaller facet labels 
+ )
+
+  #with categorical variables 
+for (cat_var in categorical_vars) {
+  #boxplot for each categorical variable
+  plot <- ggplot(bikedata_summary, aes_string(x = cat_var, y = "total_rental_count")) +
+    geom_boxplot() +
+    labs(
+      title = paste("Total Rental Count by", cat_var),
+      x = cat_var,
+      y = "Total Rental Count"
+    ) +
+    theme_minimal()
+  
+  #print the plot
+  print(plot)
+}
+
+```
+
+3.  Splitting the data
+
+```{r}
+#split the data into training (75%) and testing (25%) sets, stratified by 'seasons'
+set.seed(123)  # Set a seed for reproducibility
+bike_split <- initial_split(bikedata_summary, prop = 0.75, strata = seasons)
+
+#extract the training and testing sets
+train_data <- training(bike_split)
+test_data <- testing(bike_split)
+
+#on the training data, create a 10-fold CV split 
+cv_split <- vfold_cv(train_data, v = 10, strata = seasons)
+
+#checking the structure of the cross-validation splits
+cv_split
+```
+
+4.  Fitting MLR Models
+
+```{r}
 
 ```
