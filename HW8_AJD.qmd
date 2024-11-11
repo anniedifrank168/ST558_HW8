@@ -16,7 +16,8 @@ pacman::p_load(dplyr,
  psych,
  lubridate,
  GGally,
- tidymodels)
+ tidymodels,
+ recipes)
 
 ```
 
@@ -187,5 +188,57 @@ cv_split
 4.  Fitting MLR Models
 
 ```{r}
+#Recipe #1 
 
+  #fixing the date column
+bike_1_recipe <- recipe(~ ., data = bikedata_summary) %>%
+  #extract the day of the week from the date variable
+  step_date(date, features = "dow", label = TRUE) %>%
+  #create a new factor variable 'weekday_weekend'
+  step_mutate(
+    weekday_weekend = factor(if_else(date_dow %in% c("Saturday", "Sunday"), "Weekend", "Weekday"))
+  ) %>%
+  #remove the intermediate 'dow' variable and the original 'date' variable
+  step_rm(date_dow, date) %>% 
+  #standardize numeric vars 
+  step_normalize(all_numeric()) %>% 
+  #dummy variables 
+  step_dummy(all_nominal_predictors())
+
+#prepare the recipe
+first_recipe<- prep(bike_1_recipe)
+
+#Recipe #2 
+  #fixing the date column
+bike_1_recipe <- recipe(~ ., data = bikedata_summary) %>%
+  #extract the day of the week from the date variable
+  step_date(date, features = "dow", label = TRUE) %>%
+  #create a new factor variable 'weekday_weekend'
+  step_mutate(
+    weekday_weekend = factor(if_else(dow %in% c("Saturday", "Sunday"), "Weekend", "Weekday"))
+  ) %>%
+  #remove the intermediate 'dow' variable and the original 'date' variable
+  step_rm(dow, date) %>% 
+  #standardize numeric vars 
+  step_normalize(all_numeric()) %>% 
+  #dummy variables 
+  step_dummy(all_nominal_predictors())
+
+#Recipe #2 
+
+#Set up linear model fit to use the 'lm' engine 
+  recipe_1_model<- linear_reg() %>% 
+    set_engine("lm")
+  
+  recipe_1_wfl <- workflow() %>% 
+    add_recipe(bike_1_recipe) %>% 
+    add_model(recipe_1_model)
+  
+  recipe_1_wfl
+
+#Fit the models using 10 fold CV via fit_resamples() 
+  rec_10_fold <- vfold_cv(train_data, 10)
+  
+  rec1_fits <- recipe_1_wfl %>% 
+    fit_resamples(rec_10_fold)
 ```
